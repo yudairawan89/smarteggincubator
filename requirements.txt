@@ -1,12 +1,10 @@
 streamlit>=1.36.0
 ultralytics==8.3.53
 streamlit-webrtc>=0.47.1
-av
-opencv-python>=4.9.0
-# jika menjalankan di server/headless (tanpa GUI OS), gunakan:
-# opencv-python-headless>=4.9.0
+av==10.0.0
+opencv-python-headless==4.10.0.84
 numpy
 Pillow
-torch>=2.0.0
+torch>=2.2.0
 torchaudio
 torchvision
