@@ -3,7 +3,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import cv2, av, time, tempfile, numpy as np
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
 from ultralytics import YOLO
 
 # ======== Konfigurasi ========
@@ -71,7 +71,7 @@ if mode == "Live Camera":
 
     webrtc_streamer(
         key="yolov12-live",
-        mode="SENDRECV",
+        mode=WebRtcMode.SENDRECV,   # <-- BUKAN "SENDRECV" (string)
         rtc_configuration=RTC_CONFIG,
         video_processor_factory=LiveProcessor,
         media_stream_constraints={"video": True, "audio": False}
@@ -141,3 +141,4 @@ else:
             st.video(t_out.name)
             with open(t_out.name, "rb") as f:
                 st.download_button("Download hasil (MP4)", f, file_name="deteksi.mp4", mime="video/mp4")
+
