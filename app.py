@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration, get_device_list
+
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import cv2, av, time, tempfile, numpy as np
@@ -57,26 +59,61 @@ model = load_model(model_path)
 # =============== MODE 1: LIVE CAMERA ===============
 if mode == "Live Camera":
     st.subheader("📷 Live Camera")
-    st.write("Bounding box akan tampil langsung di stream.")
+    st.write("Pilih kamera yang ingin dipakai, lalu Start.")
 
-    class LiveProcessor(VideoProcessorBase):
-        def __init__(self):
-            self.conf = conf_thres
-            self.iou  = iou_thres
-            self.imgsz = imgsz
+    # --- Enumerasi perangkat video yang tersedia ---
+    try:
+        devices = get_device_list()
+        cams = [d for d in devices if d.kind == "videoinput"]
+    except Exception:
+        cams = []
 
-        def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-            img = frame.to_ndarray(format="bgr24")
-            annotated, _ = yolo_annotate(img, model, self.conf, self.iou, self.imgsz)
-            return av.VideoFrame.from_ndarray(annotated, format="bgr24")
+    if not cams:
+        st.warning("Kamera tidak terdeteksi. Pastikan izin kamera sudah diizinkan dan tidak dipakai aplikasi lain.")
+    else:
+        cam = st.selectbox(
+            "Video Input",
+            cams,
+            format_func=lambda d: f"{d.label or 'Camera'} ({d.deviceId[:8]})"
+        )
 
-    webrtc_streamer(
-        key="yolov12-live",
-        mode=WebRtcMode.SENDRECV,   # <-- BUKAN "SENDRECV" (string)
-        rtc_configuration=RTC_CONFIG,
-        video_processor_factory=LiveProcessor,
-        media_stream_constraints={"video": True, "audio": False}
-    )
+        # Resolusi aman (banyak UVC camera support 1280x720)
+        width_opt  = st.selectbox("Width",  [640, 800, 960, 1280], index=3)
+        height_opt = st.selectbox("Height", [480, 600, 720, 960], index=2)
+
+        class LiveProcessor(VideoProcessorBase):
+            def __init__(self):
+                self.conf = conf_thres
+                self.iou  = iou_thres
+                self.imgsz = imgsz
+            def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+                img = frame.to_ndarray(format="bgr24")
+                annotated, _ = yolo_annotate(img, model, self.conf, self.iou, self.imgsz)
+                return av.VideoFrame.from_ndarray(annotated, format="bgr24")
+
+        # Paksa gunakan deviceId yang dipilih + fallback resolusi
+        constraints = {
+            "video": {
+                "deviceId": {"exact": cam.deviceId},
+                "width": {"ideal": width_opt},
+                "height": {"ideal": height_opt}
+            },
+            "audio": False
+        }
+
+        ctx = webrtc_streamer(
+            key="yolov12-live",
+            mode=WebRtcMode.SENDRECV,
+            rtc_configuration=RTC_CONFIG,
+            media_stream_constraints=constraints,
+            video_processor_factory=LiveProcessor,
+        )
+
+        st.caption(
+            "Jika tidak tampil: pastikan izin kamera diizinkan (ikon gembok), "
+            "tidak dipakai aplikasi lain, gunakan HTTPS atau localhost, lalu refresh."
+        )
+
 
 # =============== MODE 2: GAMBAR (UPLOAD) ===============
 elif mode == "Gambar (Upload)":
@@ -142,5 +179,6 @@ else:
             st.video(t_out.name)
             with open(t_out.name, "rb") as f:
                 st.download_button("Download hasil (MP4)", f, file_name="deteksi.mp4", mime="video/mp4")
+
 
 
