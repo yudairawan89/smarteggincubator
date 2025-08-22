@@ -23,16 +23,16 @@ except Exception:
 MODEL_PATH = "best.pt"     # ganti jika perlu
 DEFAULT_IMGSZ = 800        # 640–800 bagus untuk retakan halus
 RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+
+# Google Sheet (hardcoded, tidak perlu input user)
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1ssnVf_JS_KrlNYKfSHlxHwttwtntqTY3NdB8KbYrgrQ/edit?usp=sharing"
+AUTO_REFRESH_SEC = 10  # 0 untuk nonaktif
 # =============================
 
 # ===================== Utils Google Sheet ======================
 def sheet_url_to_csv(url: str):
     """
-    Terima URL Google Sheet biasa dan ubah ke export CSV.
-    Mendukung pola:
-    - https://docs.google.com/spreadsheets/d/<ID>/edit#gid=<GID>
-    - https://docs.google.com/spreadsheets/d/<ID>/ (tanpa gid) -> pakai gid=0
-    - Jika user sudah beri URL export, kembalikan apa adanya.
+    Ubah URL Google Sheet biasa menjadi export CSV.
     """
     if not url:
         return None
@@ -41,13 +41,13 @@ def sheet_url_to_csv(url: str):
     if "docs.google.com/spreadsheets/d/" not in url:
         return None
 
-    # Ambil ID
+    # Ambil spreadsheet ID
     try:
         sid = url.split("/spreadsheets/d/")[1].split("/")[0]
     except Exception:
         return None
 
-    # Ambil GID kalau ada
+    # Ambil gid jika ada, kalau tidak gunakan 0
     gid = "0"
     if "#gid=" in url:
         gid = url.split("#gid=")[1].split("&")[0]
@@ -58,52 +58,57 @@ def sheet_url_to_csv(url: str):
 def load_sheet(csv_url: str) -> pd.DataFrame:
     """
     Baca CSV publik dari Google Sheet.
-    Harap share sheet: Anyone with the link -> Viewer.
-    Kolom yang diharapkan: Timestamp, Suhu, Kelembapan
+    Kolom yang didukung (pakai salah satu sinonim):
+      - Timestamp: timestamp / waktu / time / tanggal
+      - Suhu: suhu / suhu udara / temperature / temp / t
+      - Kelembapan: kelembapan / kelembaban / kelembaban udara rh / humidity / rh
+      - Curah Hujan: curah hujan / rain / precipitation
+      - Kecepatan Angin: kecepatan angin / wind speed
+      - Kelembaban Tanah: kelembaban tanah / soil moisture
     """
     df = pd.read_csv(csv_url)
-    # Normalisasi nama kolom
-    df.columns = [c.strip().lower() for c in df.columns]
-    # Coba deteksi kolom
-    # timestamp bisa bernama 'timestamp' atau 'waktu'
-    ts_col = None
-    for c in ["timestamp", "waktu", "time", "tanggal"]:
-        if c in df.columns:
-            ts_col = c
-            break
-    temp_col = None
-    for c in ["suhu", "temperature", "temp", "t"]:
-        if c in df.columns:
-            temp_col = c
-            break
-    hum_col = None
-    for c in ["kelembapan", "kelembaban", "humidity", "hum", "rh"]:
-        if c in df.columns:
-            hum_col = c
-            break
 
-    # Parse kolom
+    # Lower-case kolom untuk pencarian mudah
+    orig_cols = list(df.columns)
+    lower_map = {c: c.strip().lower() for c in df.columns}
+    df.columns = [lower_map[c] for c in df.columns]
+
+    def pick(*cands):
+        for c in cands:
+            if c in df.columns:
+                return c
+        return None
+
+    ts_col  = pick("timestamp", "waktu", "time", "tanggal")
+    t_col   = pick("suhu udara (°c)", "suhu", "temperature", "temp", "t")
+    rh_col  = pick("kelembaban udara rh (%)", "kelembapan", "kelembaban", "humidity", "hum", "rh")
+    rain_col= pick("curah hujan (mm)", "curah hujan", "rain", "precipitation")
+    wind_col= pick("kecepatan angin (m/s)", "kecepatan angin", "wind speed")
+    soil_col= pick("kelembaban tanah (%)", "kelembaban tanah", "soil moisture")
+
+    # Parse waktu (jika ada)
     if ts_col:
         df[ts_col] = pd.to_datetime(df[ts_col], errors="coerce")
-        df = df.dropna(subset=[ts_col])
-        df = df.sort_values(ts_col)
-        df = df.reset_index(drop=True)
+        df = df.dropna(subset=[ts_col]).sort_values(ts_col).reset_index(drop=True)
         df = df.rename(columns={ts_col: "Timestamp"})
     else:
-        # Jika tak ada timestamp, buat index berjalan saja
         df = df.reset_index(drop=True)
-        df["Timestamp"] = pd.RangeIndex(start=1, stop=len(df)+1, step=1)
+        df["Timestamp"] = pd.RangeIndex(1, len(df) + 1)
 
-    if temp_col:
-        df = df.rename(columns={temp_col: "Suhu"})
-    if hum_col:
-        df = df.rename(columns={hum_col: "Kelembapan"})
+    # Rename kolom angka ke nama konsisten
+    rename_map = {}
+    if t_col: rename_map[t_col] = "Suhu Udara (°C)"
+    if rh_col: rename_map[rh_col] = "Kelembaban Udara RH (%)"
+    if rain_col: rename_map[rain_col] = "Curah Hujan (mm)"
+    if wind_col: rename_map[wind_col] = "Kecepatan Angin (m/s)"
+    if soil_col: rename_map[soil_col] = "Kelembaban Tanah (%)"
+    df = df.rename(columns=rename_map)
 
-    # pastikan kolom angka bertipe float
-    if "Suhu" in df.columns:
-        df["Suhu"] = pd.to_numeric(df["Suhu"], errors="coerce")
-    if "Kelembapan" in df.columns:
-        df["Kelembapan"] = pd.to_numeric(df["Kelembapan"], errors="coerce")
+    # Konversi numerik
+    for col in ["Suhu Udara (°C)", "Kelembaban Udara RH (%)", "Curah Hujan (mm)",
+                "Kecepatan Angin (m/s)", "Kelembaban Tanah (%)"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     return df
 
@@ -112,7 +117,6 @@ def load_sheet(csv_url: str) -> pd.DataFrame:
 def load_model(path: str):
     m = YOLO(path)
     try:
-        # aktifkan half precision kalau GPU mendukung (sedikit lebih cepat)
         import torch
         if torch.cuda.is_available():
             m.to("cuda")
@@ -121,12 +125,7 @@ def load_model(path: str):
     return m
 
 def yolo_annotate(bgr_image: np.ndarray, model: YOLO, conf: float, iou: float, imgsz: int):
-    """
-    Jalankan inferensi dan kembalikan frame ber-anotasi BGR.
-    """
-    results = model.predict(
-        bgr_image, imgsz=imgsz, conf=conf, iou=iou, verbose=False
-    )
+    results = model.predict(bgr_image, imgsz=imgsz, conf=conf, iou=iou, verbose=False)
     annotated = results[0].plot()  # BGR ndarray dengan bbox/label
     return annotated, results[0]
 
@@ -142,83 +141,76 @@ with st.sidebar:
     imgsz      = st.select_slider("Image size", options=[640, 800, 960], value=DEFAULT_IMGSZ)
     st.caption("Tips: 640/800 cukup cepat; 960 lebih teliti untuk retakan kecil.")
     st.divider()
-
-    mode = st.radio("Mode", ["Live Camera", "Gambar (Upload)", "Video (Upload)", "Monitoring (Google Sheet)"])
-
-    if mode == "Monitoring (Google Sheet)":
-        st.markdown("### Link Google Sheet")
-        sheet_url_input = st.text_input(
-            "Tempel URL Google Sheet (share: Anyone with link - Viewer)",
-            placeholder="https://docs.google.com/spreadsheets/d/......../edit#gid=0"
-        )
-        refresh_sec = st.number_input("Auto-refresh (detik)", min_value=0, max_value=120, value=10, step=5,
-                                      help="0 = tanpa auto-refresh")
-        st.caption("Kolom yang diharapkan: **Timestamp**, **Suhu**, **Kelembapan** (boleh pakai nama serupa).")
+    mode = st.radio("Mode", ["Monitoring (Google Sheet)", "Live Camera", "Gambar (Upload)", "Video (Upload)"], index=0)
+    st.markdown("> Kelas: **Telur**, **Retak**, **Anak Ayam**")
 
 # ===================== MODE ======================
 
-# =============== MODE 4: MONITORING (GOOGLE SHEET) ===============
+# =============== MODE 1 (default): MONITORING (GOOGLE SHEET) ===============
 if mode == "Monitoring (Google Sheet)":
-    st.subheader("📈 Monitoring Suhu & Kelembapan (Google Sheet)")
+    st.subheader("📈 Hasil Prediksi Terkini")
 
-    if sheet_url_input:
-        csv_url = sheet_url_to_csv(sheet_url_input)
-        if not csv_url:
-            st.error("URL tidak valid. Tempel URL Google Sheet lengkap (menu Share -> Anyone with link - Viewer).")
-        else:
-            if st_autorefresh and refresh_sec and refresh_sec > 0:
-                # jalankan autorefresh
-                st_autorefresh(interval=int(refresh_sec * 1000), key="sheet_refresh")
+    csv_url = sheet_url_to_csv(SHEET_URL)
+    if not csv_url:
+        st.error("URL Google Sheet tidak valid.")
+        st.stop()
 
-            try:
-                df = load_sheet(csv_url)
-                if df.empty:
-                    st.warning("Sheet kosong atau belum ada data.")
-                else:
-                    # pilih kolom tampil
-                    cols_show = [c for c in ["Timestamp", "Suhu", "Kelembapan"] if c in df.columns]
-                    if "Timestamp" in cols_show:
-                        df_view = df[cols_show].copy()
-                        st.dataframe(df_view.tail(100), use_container_width=True)
+    # Auto-refresh jika lib tersedia
+    if st_autorefresh and AUTO_REFRESH_SEC and AUTO_REFRESH_SEC > 0:
+        st_autorefresh(interval=AUTO_REFRESH_SEC * 1000, key="gsheet_refresh")
 
-                        # metrics terbaru
-                        latest = df.iloc[-1]
-                        col1, col2, col3 = st.columns([1,1,2])
-                        with col1:
-                            if "Suhu" in df.columns:
-                                st.metric("Suhu terakhir (°C)", f"{latest.get('Suhu', float('nan')):.2f}")
-                        with col2:
-                            if "Kelembapan" in df.columns:
-                                st.metric("Kelembapan terakhir (%RH)", f"{latest.get('Kelembapan', float('nan')):.1f}")
-                        with col3:
-                            st.write(f"Terakhir: **{latest['Timestamp']}**")
+    try:
+        df = load_sheet(csv_url)
+    except Exception as e:
+        st.error(f"Gagal memuat Sheet: {e}")
+        st.stop()
 
-                        # grafik
-                        chart_df = df.tail(200).copy()
-                        chart_df = chart_df.set_index("Timestamp")
-                        gcols = [c for c in ["Suhu", "Kelembapan"] if c in chart_df.columns]
-                        if gcols:
-                            st.line_chart(chart_df[gcols])
-                        else:
-                            st.info("Tidak menemukan kolom angka untuk digrafikkan (Suhu/Kelembapan).")
-                    else:
-                        st.dataframe(df.tail(100), use_container_width=True)
-                        st.info("Tidak ada kolom 'Timestamp'. Data ditampilkan apa adanya.")
-            except Exception as e:
-                st.error(f"Gagal memuat Sheet: {e}")
-                st.stop()
+    if df.empty:
+        st.warning("Sheet kosong atau belum ada data.")
     else:
-        st.info("Tempel URL Google Sheet di sidebar.")
+        # METRICS TERKINI
+        latest = df.iloc[-1]
+        cols = st.columns(5)
+        def m(col, title, key):
+            if key in df.columns and pd.notna(latest.get(key)):
+                with col:
+                    st.metric(title, f"{latest.get(key):.1f}")
+        m(cols[0], "Suhu Udara (°C)", "Suhu Udara (°C)")
+        m(cols[1], "Kelembaban Udara RH (%)", "Kelembaban Udara RH (%)")
+        m(cols[2], "Curah Hujan (mm)", "Curah Hujan (mm)")
+        m(cols[3], "Kecepatan Angin (m/s)", "Kecepatan Angin (m/s)")
+        m(cols[4], "Kelembaban Tanah (%)", "Kelembaban Tanah (%)")
 
-# =============== MODE 1: LIVE CAMERA ===============
+        st.caption(f"Terakhir diperbarui: **{latest['Timestamp']}**")
+
+        st.divider()
+        colA, colB = st.columns(2)
+        # Grafik SUHU
+        if "Suhu Udara (°C)" in df.columns:
+            with colA:
+                st.markdown("#### Suhu Udara (°C)")
+                ch = df[["Timestamp", "Suhu Udara (°C)"]].dropna().set_index("Timestamp").tail(200)
+                st.line_chart(ch)
+        # Grafik RH
+        if "Kelembaban Udara RH (%)" in df.columns:
+            with colB:
+                st.markdown("#### Kelembaban Udara RH (%)")
+                ch = df[["Timestamp", "Kelembaban Udara RH (%)"]].dropna().set_index("Timestamp").tail(200)
+                st.line_chart(ch)
+
+        # Tabel ringkas
+        st.markdown("#### Data Terbaru")
+        show_cols = [c for c in ["Timestamp", "Suhu Udara (°C)", "Kelembaban Udara RH (%)",
+                                 "Curah Hujan (mm)", "Kecepatan Angin (m/s)", "Kelembaban Tanah (%)"] if c in df.columns]
+        st.dataframe(df[show_cols].tail(100), use_container_width=True)
+
+# =============== MODE 2: LIVE CAMERA ===============
 elif mode == "Live Camera":
-    # load model HANYA untuk mode yang butuh
     model = load_model(model_path)
 
     st.subheader("📷 Live Camera")
     st.write("Pilih resolusi, lalu Start.")
 
-    # Dropdown resolusi
     width_opt  = st.selectbox("Width",  [640, 800, 960, 1280], index=3)
     height_opt = st.selectbox("Height", [480, 600, 720, 960], index=2)
 
@@ -240,7 +232,7 @@ elif mode == "Live Camera":
         "audio": False
     }
 
-    ctx = webrtc_streamer(
+    webrtc_streamer(
         key="yolov12-live",
         mode=WebRtcMode.SENDRECV,
         rtc_configuration=RTC_CONFIG,
@@ -253,7 +245,7 @@ elif mode == "Live Camera":
         "tidak dipakai aplikasi lain, gunakan HTTPS/localhost, lalu refresh."
     )
 
-# =============== MODE 2: GAMBAR (UPLOAD) ===============
+# =============== MODE 3: GAMBAR (UPLOAD) ===============
 elif mode == "Gambar (Upload)":
     model = load_model(model_path)
 
@@ -267,7 +259,6 @@ elif mode == "Gambar (Upload)":
         else:
             annotated, res = yolo_annotate(bgr, model, conf_thres, iou_thres, imgsz)
             st.image(cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB), caption="Hasil deteksi", use_container_width=True)
-            # ringkasan deteksi
             st.write("Deteksi per kelas:")
             names = res.names
             counts = {}
@@ -276,14 +267,13 @@ elif mode == "Gambar (Upload)":
                 counts[names[cls_id]] = counts.get(names[cls_id], 0) + 1
             st.json(counts if counts else {"(tidak ada deteksi)": 0})
 
-# =============== MODE 3: VIDEO (UPLOAD) ===============
+# =============== MODE 4: VIDEO (UPLOAD) ===============
 else:
     model = load_model(model_path)
 
     st.subheader("🎞️ Deteksi dari Video (Upload)")
     file = st.file_uploader("Upload video", type=["mp4","mov","avi","mkv","webm"])
     if file is not None:
-        # simpan ke file temporer
         t_in = tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.name).suffix)
         t_in.write(file.read()); t_in.flush(); t_in.close()
 
