@@ -32,64 +32,72 @@ AUTO_REFRESH_SEC = 10  # 0 untuk nonaktif
 TZ_ID = "Asia/Jakarta"
 # =============================
 
-# -------------------- Styling Modern --------------------
+# -------------------- Styling Cerah & Elegan --------------------
 st.set_page_config(page_title="UHTP Smart Egg Incubator", layout="wide", page_icon="🥚")
 st.markdown("""
 <style>
 :root{
-  --brand:#0ea5e9;          /* cyan/sky */
-  --brand-2:#0891b2;
-  --bg-grad-1:#0f172a;      /* slate-900 */
-  --bg-grad-2:#111827;      /* gray-900 */
-  --card:#111827;
-  --text:#e5e7eb;           /* gray-200 */
-  --muted:#94a3b8;          /* slate-400 */
-  --accent:#22c55e;         /* green-500 */
+  --brand:#0ea5e9;          /* sky-500 */
+  --brand-2:#22c55e;        /* green-500 */
+  --ink:#0f172a;            /* slate-900 */
+  --ink-soft:#334155;       /* slate-700 */
+  --text:#0b1220;           /* nearly black */
+  --muted:#475569;          /* slate-600 */
+  --card:#ffffffcc;         /* white glass */
+  --border:#e5e7eb;         /* gray-200 */
 }
-html, body, .stApp { 
-  background: radial-gradient(1200px 800px at 20% -10%, rgba(14,165,233,.15), transparent 50%),
-              linear-gradient(120deg, var(--bg-grad-1), var(--bg-grad-2));
-  color: var(--text) !important;
-}
-header, .block-container { padding-top: 0.5rem; }
-h1, h2, h3, h4, h5, h6 { color: var(--text) !important; }
 
-/* header bar */
+/* latar belakang cerah dengan motif halus */
+html, body, .stApp {
+  background:
+    radial-gradient(900px 600px at 10% 0%, rgba(56,189,248,.20), transparent 60%),
+    radial-gradient(900px 600px at 90% 10%, rgba(34,197,94,.18), transparent 60%),
+    linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
+  color: var(--text);
+}
+
+/* header & container spacing */
+header, .block-container { padding-top: .5rem; }
+h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
+
+/* header bar dengan glass morphism */
 .header-wrap {
-  background: linear-gradient(90deg, rgba(14,165,233,.12), rgba(34,197,94,.12));
-  border: 1px solid rgba(255,255,255,.08);
+  background: var(--card);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
   border-radius: 18px;
   padding: 12px 18px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.04);
+  box-shadow: 0 10px 30px rgba(2,8,23,.08), inset 0 1px 0 rgba(255,255,255,.65);
   margin-bottom: 8px;
 }
 
-/* card metric */
+/* kartu metric */
 .metric-card{
-  background: linear-gradient(145deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-  border: 1px solid rgba(255,255,255,.08);
+  background: var(--card);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
   border-radius: 16px;
   padding: 14px 16px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  box-shadow: 0 8px 24px rgba(2,8,23,.06);
 }
 .metric-title{
-  font-size: .95rem; color: var(--muted);
+  font-size: .92rem; color: var(--muted);
   display:flex; gap:.5rem; align-items:center;
 }
 .metric-value{
-  font-size: 2.1rem; font-weight: 700; letter-spacing:.3px;
-  background: linear-gradient(90deg, #e5e7eb, #c7d2fe);
+  font-size: 2.15rem; font-weight: 800; letter-spacing:.2px;
+  background: linear-gradient(90deg, var(--ink), #1d4ed8);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
 
 /* section title */
 .section-title{
-  font-weight:700; letter-spacing:.3px; font-size:1.05rem; 
-  color: #cbd5e1; margin:.25rem 0 .5rem;
+  font-weight:800; letter-spacing:.2px; font-size:1.05rem;
+  color: var(--ink-soft); margin:.35rem 0 .5rem;
 }
 
-/* tweak dataframes */
-.dataframe { filter: saturate(1.05); }
+/* tweak dataframes & widgets */
+div[data-testid="stDataFrame"] { border: 1px solid var(--border); border-radius: 14px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -193,7 +201,7 @@ def app_header():
         st.markdown(
             """
             <div class="header-wrap" style="text-align:center;">
-              <h1 style="margin:0;font-weight:800;letter-spacing:.3px;">
+              <h1 style="margin:0;font-weight:900;letter-spacing:.2px;color:#0b1220;">
                 UHTP Smart Egg Incubator
               </h1>
               <div style="font-size:.95rem;color:var(--muted);margin-top:2px;">
@@ -237,10 +245,10 @@ if mode == "Monitoring (Google Sheet)":
 
         colA, colB, colC, colD, colE = st.columns(5)
         # Kartu metric custom (🌡️ & 💧)
-        def metric_card(col, title, value, icon=None):
+        def metric_card(col, title, value, icon=None, accent="var(--brand)"):
             with col:
                 st.markdown(f"""
-                <div class="metric-card">
+                <div class="metric-card" style="border-left:6px solid {accent}">
                   <div class="metric-title">{icon or ''} {title}</div>
                   <div class="metric-value">{value}</div>
                 </div>
@@ -248,19 +256,19 @@ if mode == "Monitoring (Google Sheet)":
 
         # Suhu
         if "Suhu Udara (°C)" in df.columns and pd.notna(latest.get("Suhu Udara (°C)")):
-            metric_card(colA, "Suhu Udara (°C)", f"{latest['Suhu Udara (°C)']:.1f}", "🌡️")
+            metric_card(colA, "Suhu Udara (°C)", f"{latest['Suhu Udara (°C)']:.1f}", "🌡️", "#38bdf8")
         # Kelembaban RH
         if "Kelembaban Udara RH (%)" in df.columns and pd.notna(latest.get("Kelembaban Udara RH (%)")):
-            metric_card(colB, "Kelembaban Udara RH (%)", f"{latest['Kelembaban Udara RH (%)']:.1f}", "💧")
+            metric_card(colB, "Kelembaban Udara RH (%)", f"{latest['Kelembaban Udara RH (%)']:.1f}", "💧", "#34d399")
         # Curah hujan
         if "Curah Hujan (mm)" in df.columns and pd.notna(latest.get("Curah Hujan (mm)")):
-            metric_card(colC, "Curah Hujan (mm)", f"{latest['Curah Hujan (mm)']:.1f}", "☔")
+            metric_card(colC, "Curah Hujan (mm)", f"{latest['Curah Hujan (mm)']:.1f}", "☔", "#a78bfa")
         # Angin
         if "Kecepatan Angin (m/s)" in df.columns and pd.notna(latest.get("Kecepatan Angin (m/s)")):
-            metric_card(colD, "Kecepatan Angin (m/s)", f"{latest['Kecepatan Angin (m/s)']:.1f}", "↯")
+            metric_card(colD, "Kecepatan Angin (m/s)", f"{latest['Kecepatan Angin (m/s)']:.1f}", "↯", "#fb7185")
         # Kelembaban tanah
         if "Kelembaban Tanah (%)" in df.columns and pd.notna(latest.get("Kelembaban Tanah (%)")):
-            metric_card(colE, "Kelembaban Tanah (%)", f"{latest['Kelembaban Tanah (%)']:.1f}", "🧪")
+            metric_card(colE, "Kelembaban Tanah (%)", f"{latest['Kelembaban Tanah (%)']:.1f}", "🧪", "#f59e0b")
 
         st.caption(f"Terakhir diperbarui: **{format_wib(latest['Timestamp'])}**")
 
