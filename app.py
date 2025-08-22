@@ -6,6 +6,8 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import cv2, av, time, tempfile, numpy as np
 import streamlit as st
 import pandas as pd
+import pytz
+from datetime import datetime
 
 # webrtc
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
@@ -20,91 +22,129 @@ except Exception:
     st_autorefresh = None
 
 # ======== Konfigurasi ========
-MODEL_PATH = "best.pt"     # ganti jika perlu
-DEFAULT_IMGSZ = 800        # 640–800 bagus untuk retakan halus
+MODEL_PATH = "best.pt"     # dipakai internal; input user dihapus
+DEFAULT_IMGSZ = 800
 RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
 
-# Google Sheet (hardcoded, tidak perlu input user)
+# Google Sheet (fixed / tanpa input sidebar)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ssnVf_JS_KrlNYKfSHlxHwttwtntqTY3NdB8KbYrgrQ/edit?usp=sharing"
 AUTO_REFRESH_SEC = 10  # 0 untuk nonaktif
+TZ_ID = "Asia/Jakarta"
 # =============================
 
-# ===================== Utils Google Sheet ======================
+# -------------------- Styling Modern --------------------
+st.set_page_config(page_title="UHTP Smart Egg Incubator", layout="wide", page_icon="🥚")
+st.markdown("""
+<style>
+:root{
+  --brand:#0ea5e9;          /* cyan/sky */
+  --brand-2:#0891b2;
+  --bg-grad-1:#0f172a;      /* slate-900 */
+  --bg-grad-2:#111827;      /* gray-900 */
+  --card:#111827;
+  --text:#e5e7eb;           /* gray-200 */
+  --muted:#94a3b8;          /* slate-400 */
+  --accent:#22c55e;         /* green-500 */
+}
+html, body, .stApp { 
+  background: radial-gradient(1200px 800px at 20% -10%, rgba(14,165,233,.15), transparent 50%),
+              linear-gradient(120deg, var(--bg-grad-1), var(--bg-grad-2));
+  color: var(--text) !important;
+}
+header, .block-container { padding-top: 0.5rem; }
+h1, h2, h3, h4, h5, h6 { color: var(--text) !important; }
+
+/* header bar */
+.header-wrap {
+  background: linear-gradient(90deg, rgba(14,165,233,.12), rgba(34,197,94,.12));
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 18px;
+  padding: 12px 18px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.04);
+  margin-bottom: 8px;
+}
+
+/* card metric */
+.metric-card{
+  background: linear-gradient(145deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.metric-title{
+  font-size: .95rem; color: var(--muted);
+  display:flex; gap:.5rem; align-items:center;
+}
+.metric-value{
+  font-size: 2.1rem; font-weight: 700; letter-spacing:.3px;
+  background: linear-gradient(90deg, #e5e7eb, #c7d2fe);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+/* section title */
+.section-title{
+  font-weight:700; letter-spacing:.3px; font-size:1.05rem; 
+  color: #cbd5e1; margin:.25rem 0 .5rem;
+}
+
+/* tweak dataframes */
+.dataframe { filter: saturate(1.05); }
+</style>
+""", unsafe_allow_html=True)
+
+# -------------------- Utils --------------------
 def sheet_url_to_csv(url: str):
-    """
-    Ubah URL Google Sheet biasa menjadi export CSV.
-    """
+    """Ubah URL Google Sheet biasa menjadi export CSV."""
     if not url:
         return None
     if "export?format=csv" in url or "gviz/tq" in url:
-        return url  # sudah CSV
+        return url
     if "docs.google.com/spreadsheets/d/" not in url:
         return None
-
-    # Ambil spreadsheet ID
     try:
         sid = url.split("/spreadsheets/d/")[1].split("/")[0]
     except Exception:
         return None
-
-    # Ambil gid jika ada, kalau tidak gunakan 0
     gid = "0"
     if "#gid=" in url:
         gid = url.split("#gid=")[1].split("&")[0]
-
     return f"https://docs.google.com/spreadsheets/d/{sid}/export?format=csv&gid={gid}"
 
 @st.cache_data(show_spinner=False, ttl=10)
 def load_sheet(csv_url: str) -> pd.DataFrame:
-    """
-    Baca CSV publik dari Google Sheet.
-    Kolom yang didukung (pakai salah satu sinonim):
-      - Timestamp: timestamp / waktu / time / tanggal
-      - Suhu: suhu / suhu udara / temperature / temp / t
-      - Kelembapan: kelembapan / kelembaban / kelembaban udara rh / humidity / rh
-      - Curah Hujan: curah hujan / rain / precipitation
-      - Kecepatan Angin: kecepatan angin / wind speed
-      - Kelembaban Tanah: kelembaban tanah / soil moisture
-    """
+    """Baca CSV publik dari Google Sheet dan normalisasi kolom."""
     df = pd.read_csv(csv_url)
-
-    # Lower-case kolom untuk pencarian mudah
-    orig_cols = list(df.columns)
-    lower_map = {c: c.strip().lower() for c in df.columns}
-    df.columns = [lower_map[c] for c in df.columns]
+    df.columns = [c.strip().lower() for c in df.columns]
 
     def pick(*cands):
         for c in cands:
-            if c in df.columns:
-                return c
+            if c in df.columns: return c
         return None
 
-    ts_col  = pick("timestamp", "waktu", "time", "tanggal")
-    t_col   = pick("suhu udara (°c)", "suhu", "temperature", "temp", "t")
-    rh_col  = pick("kelembaban udara rh (%)", "kelembapan", "kelembaban", "humidity", "hum", "rh")
-    rain_col= pick("curah hujan (mm)", "curah hujan", "rain", "precipitation")
-    wind_col= pick("kecepatan angin (m/s)", "kecepatan angin", "wind speed")
-    soil_col= pick("kelembaban tanah (%)", "kelembaban tanah", "soil moisture")
+    ts_col  = pick("timestamp","waktu","time","tanggal")
+    t_col   = pick("suhu udara (°c)","suhu","temperature","temp","t")
+    rh_col  = pick("kelembaban udara rh (%)","kelembapan","kelembaban","humidity","hum","rh")
+    rain_col= pick("curah hujan (mm)","curah hujan","rain","precipitation")
+    wind_col= pick("kecepatan angin (m/s)","kecepatan angin","wind speed")
+    soil_col= pick("kelembaban tanah (%)","kelembaban tanah","soil moisture")
 
-    # Parse waktu (jika ada)
     if ts_col:
         df[ts_col] = pd.to_datetime(df[ts_col], errors="coerce")
         df = df.dropna(subset=[ts_col]).sort_values(ts_col).reset_index(drop=True)
-        df = df.rename(columns={ts_col: "Timestamp"})
+        df = df.rename(columns={ts_col:"Timestamp"})
     else:
         df = df.reset_index(drop=True)
-        df["Timestamp"] = pd.RangeIndex(1, len(df) + 1)
+        df["Timestamp"] = pd.RangeIndex(1, len(df)+1)
 
-    # Rename kolom angka ke nama konsisten
     rename_map = {}
-    if t_col: rename_map[t_col] = "Suhu Udara (°C)"
-    if rh_col: rename_map[rh_col] = "Kelembaban Udara RH (%)"
+    if t_col:    rename_map[t_col]    = "Suhu Udara (°C)"
+    if rh_col:   rename_map[rh_col]   = "Kelembaban Udara RH (%)"
     if rain_col: rename_map[rain_col] = "Curah Hujan (mm)"
     if wind_col: rename_map[wind_col] = "Kecepatan Angin (m/s)"
     if soil_col: rename_map[soil_col] = "Kelembaban Tanah (%)"
     df = df.rename(columns=rename_map)
 
-    # Konversi numerik
     for col in ["Suhu Udara (°C)", "Kelembaban Udara RH (%)", "Curah Hujan (mm)",
                 "Kecepatan Angin (m/s)", "Kelembaban Tanah (%)"]:
         if col in df.columns:
@@ -112,7 +152,21 @@ def load_sheet(csv_url: str) -> pd.DataFrame:
 
     return df
 
-# Cache model agar tidak reload setiap interaksi
+def format_wib(ts) -> str:
+    """Format contoh: 22 Agustus 2025, jam 13:45:03 WIB."""
+    if ts is None or pd.isna(ts):
+        return "-"
+    tz = pytz.timezone(TZ_ID)
+    if isinstance(ts, str):
+        ts = pd.to_datetime(ts, errors="coerce")
+    if getattr(ts, "tzinfo", None) is None:
+        dt = tz.localize(pd.Timestamp(ts).to_pydatetime())
+    else:
+        dt = ts.tz_convert(tz).to_pydatetime()
+    months = ["Januari","Februari","Maret","April","Mei","Juni",
+              "Juli","Agustus","September","Oktober","November","Desember"]
+    return f"{dt.day} {months[dt.month-1]} {dt.year}, jam {dt:%H:%M:%S} WIB"
+
 @st.cache_resource(show_spinner=True)
 def load_model(path: str):
     m = YOLO(path)
@@ -126,36 +180,47 @@ def load_model(path: str):
 
 def yolo_annotate(bgr_image: np.ndarray, model: YOLO, conf: float, iou: float, imgsz: int):
     results = model.predict(bgr_image, imgsz=imgsz, conf=conf, iou=iou, verbose=False)
-    annotated = results[0].plot()  # BGR ndarray dengan bbox/label
+    annotated = results[0].plot()
     return annotated, results[0]
 
-# ===================== UI ======================
-st.set_page_config(page_title="Deteksi Telur • Streamlit", layout="wide")
-st.title("🥚 Deteksi Telur • YOLOv12 (Streamlit)")
+# -------------------- Header dengan logo kiri-kanan --------------------
+def app_header():
+    c1, c2, c3 = st.columns([1,3,1], gap="small")
+    with c1:
+        if Path("logoseg.png").exists():
+            st.image("logoseg.png", use_container_width=True)
+    with c2:
+        st.markdown(
+            """
+            <div class="header-wrap" style="text-align:center;">
+              <h1 style="margin:0;font-weight:800;letter-spacing:.3px;">
+                UHTP Smart Egg Incubator
+              </h1>
+              <div style="font-size:.95rem;color:var(--muted);margin-top:2px;">
+                Real-time monitoring • Control • Analytics
+              </div>
+            </div>
+            """, unsafe_allow_html=True
+        )
+    with c3:
+        if Path("logosponsor.png").exists():
+            st.image("logosponsor.png", use_container_width=True)
 
+app_header()
+
+# -------------------- Sidebar (tanpa input path model) --------------------
 with st.sidebar:
     st.header("Pengaturan")
-    model_path = st.text_input("Path model (.pt)", MODEL_PATH)
     conf_thres = st.slider("Confidence", 0.05, 0.95, 0.30, 0.01)
     iou_thres  = st.slider("IoU",        0.10, 0.95, 0.60, 0.01)
     imgsz      = st.select_slider("Image size", options=[640, 800, 960], value=DEFAULT_IMGSZ)
-    st.caption("Tips: 640/800 cukup cepat; 960 lebih teliti untuk retakan kecil.")
+    st.caption("Mode deteksi menggunakan model bawaan.")
     st.divider()
     mode = st.radio("Mode", ["Monitoring (Google Sheet)", "Live Camera", "Gambar (Upload)", "Video (Upload)"], index=0)
-    st.markdown("> Kelas: **Telur**, **Retak**, **Anak Ayam**")
 
-# ===================== MODE ======================
-
-# =============== MODE 1 (default): MONITORING (GOOGLE SHEET) ===============
+# -------------------- MODE: Monitoring (default) --------------------
 if mode == "Monitoring (Google Sheet)":
-    st.subheader("📈 Hasil Prediksi Terkini")
-
     csv_url = sheet_url_to_csv(SHEET_URL)
-    if not csv_url:
-        st.error("URL Google Sheet tidak valid.")
-        st.stop()
-
-    # Auto-refresh jika lib tersedia
     if st_autorefresh and AUTO_REFRESH_SEC and AUTO_REFRESH_SEC > 0:
         st_autorefresh(interval=AUTO_REFRESH_SEC * 1000, key="gsheet_refresh")
 
@@ -168,45 +233,58 @@ if mode == "Monitoring (Google Sheet)":
     if df.empty:
         st.warning("Sheet kosong atau belum ada data.")
     else:
-        # METRICS TERKINI
         latest = df.iloc[-1]
-        cols = st.columns(5)
-        def m(col, title, key):
-            if key in df.columns and pd.notna(latest.get(key)):
-                with col:
-                    st.metric(title, f"{latest.get(key):.1f}")
-        m(cols[0], "Suhu Udara (°C)", "Suhu Udara (°C)")
-        m(cols[1], "Kelembaban Udara RH (%)", "Kelembaban Udara RH (%)")
-        m(cols[2], "Curah Hujan (mm)", "Curah Hujan (mm)")
-        m(cols[3], "Kecepatan Angin (m/s)", "Kecepatan Angin (m/s)")
-        m(cols[4], "Kelembaban Tanah (%)", "Kelembaban Tanah (%)")
 
-        st.caption(f"Terakhir diperbarui: **{latest['Timestamp']}**")
+        colA, colB, colC, colD, colE = st.columns(5)
+        # Kartu metric custom (🌡️ & 💧)
+        def metric_card(col, title, value, icon=None):
+            with col:
+                st.markdown(f"""
+                <div class="metric-card">
+                  <div class="metric-title">{icon or ''} {title}</div>
+                  <div class="metric-value">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # Suhu
+        if "Suhu Udara (°C)" in df.columns and pd.notna(latest.get("Suhu Udara (°C)")):
+            metric_card(colA, "Suhu Udara (°C)", f"{latest['Suhu Udara (°C)']:.1f}", "🌡️")
+        # Kelembaban RH
+        if "Kelembaban Udara RH (%)" in df.columns and pd.notna(latest.get("Kelembaban Udara RH (%)")):
+            metric_card(colB, "Kelembaban Udara RH (%)", f"{latest['Kelembaban Udara RH (%)']:.1f}", "💧")
+        # Curah hujan
+        if "Curah Hujan (mm)" in df.columns and pd.notna(latest.get("Curah Hujan (mm)")):
+            metric_card(colC, "Curah Hujan (mm)", f"{latest['Curah Hujan (mm)']:.1f}", "☔")
+        # Angin
+        if "Kecepatan Angin (m/s)" in df.columns and pd.notna(latest.get("Kecepatan Angin (m/s)")):
+            metric_card(colD, "Kecepatan Angin (m/s)", f"{latest['Kecepatan Angin (m/s)']:.1f}", "↯")
+        # Kelembaban tanah
+        if "Kelembaban Tanah (%)" in df.columns and pd.notna(latest.get("Kelembaban Tanah (%)")):
+            metric_card(colE, "Kelembaban Tanah (%)", f"{latest['Kelembaban Tanah (%)']:.1f}", "🧪")
+
+        st.caption(f"Terakhir diperbarui: **{format_wib(latest['Timestamp'])}**")
 
         st.divider()
-        colA, colB = st.columns(2)
-        # Grafik SUHU
+        col1, col2 = st.columns(2, gap="large")
         if "Suhu Udara (°C)" in df.columns:
-            with colA:
-                st.markdown("#### Suhu Udara (°C)")
-                ch = df[["Timestamp", "Suhu Udara (°C)"]].dropna().set_index("Timestamp").tail(200)
+            with col1:
+                st.markdown('<div class="section-title">Trend Suhu Udara (°C)</div>', unsafe_allow_html=True)
+                ch = df[["Timestamp","Suhu Udara (°C)"]].dropna().set_index("Timestamp").tail(200)
                 st.line_chart(ch)
-        # Grafik RH
         if "Kelembaban Udara RH (%)" in df.columns:
-            with colB:
-                st.markdown("#### Kelembaban Udara RH (%)")
-                ch = df[["Timestamp", "Kelembaban Udara RH (%)"]].dropna().set_index("Timestamp").tail(200)
+            with col2:
+                st.markdown('<div class="section-title">Trend Kelembaban Udara RH (%)</div>', unsafe_allow_html=True)
+                ch = df[["Timestamp","Kelembaban Udara RH (%)"]].dropna().set_index("Timestamp").tail(200)
                 st.line_chart(ch)
 
-        # Tabel ringkas
-        st.markdown("#### Data Terbaru")
+        st.markdown('<div class="section-title">Data Terbaru</div>', unsafe_allow_html=True)
         show_cols = [c for c in ["Timestamp", "Suhu Udara (°C)", "Kelembaban Udara RH (%)",
                                  "Curah Hujan (mm)", "Kecepatan Angin (m/s)", "Kelembaban Tanah (%)"] if c in df.columns]
         st.dataframe(df[show_cols].tail(100), use_container_width=True)
 
-# =============== MODE 2: LIVE CAMERA ===============
+# -------------------- MODE: Live Camera --------------------
 elif mode == "Live Camera":
-    model = load_model(model_path)
+    model = load_model(MODEL_PATH)
 
     st.subheader("📷 Live Camera")
     st.write("Pilih resolusi, lalu Start.")
@@ -240,14 +318,9 @@ elif mode == "Live Camera":
         video_processor_factory=LiveProcessor,
     )
 
-    st.caption(
-        "Jika kamera tidak tampil: pastikan izin kamera sudah diizinkan, "
-        "tidak dipakai aplikasi lain, gunakan HTTPS/localhost, lalu refresh."
-    )
-
-# =============== MODE 3: GAMBAR (UPLOAD) ===============
+# -------------------- MODE: Gambar (Upload) --------------------
 elif mode == "Gambar (Upload)":
-    model = load_model(model_path)
+    model = load_model(MODEL_PATH)
 
     st.subheader("🖼️ Deteksi dari Gambar")
     file = st.file_uploader("Upload gambar", type=["jpg","jpeg","png","bmp","webp","tif","tiff"])
@@ -267,9 +340,9 @@ elif mode == "Gambar (Upload)":
                 counts[names[cls_id]] = counts.get(names[cls_id], 0) + 1
             st.json(counts if counts else {"(tidak ada deteksi)": 0})
 
-# =============== MODE 4: VIDEO (UPLOAD) ===============
+# -------------------- MODE: Video (Upload) --------------------
 else:
-    model = load_model(model_path)
+    model = load_model(MODEL_PATH)
 
     st.subheader("🎞️ Deteksi dari Video (Upload)")
     file = st.file_uploader("Upload video", type=["mp4","mov","avi","mkv","webm"])
