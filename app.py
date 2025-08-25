@@ -8,7 +8,6 @@ import streamlit as st
 import pandas as pd
 import pytz
 from datetime import datetime
-from PIL import Image as PILImage  # <-- untuk kontrol ukuran logo
 
 # webrtc
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
@@ -25,7 +24,9 @@ except Exception:
 # ======== Konfigurasi ========
 MODEL_PATH = "best.pt"     # dipakai internal; input user dihapus
 DEFAULT_IMGSZ = 800
-RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+RTC_CONFIG = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
 
 # Google Sheet (fixed / tanpa input sidebar)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ssnVf_JS_KrlNYKfSHlxHwttwtntqTY3NdB8KbYrgrQ/edit?usp=sharing"
@@ -48,7 +49,6 @@ st.markdown("""
   --border:#e5e7eb;         /* gray-200 */
 }
 
-/* latar belakang cerah dengan motif halus */
 html, body, .stApp {
   background:
     radial-gradient(900px 600px at 10% 0%, rgba(56,189,248,.20), transparent 60%),
@@ -56,20 +56,59 @@ html, body, .stApp {
     linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
   color: var(--text);
 }
-
-/* header & container spacing */
 header, .block-container { padding-top: .5rem; }
 h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
 
-/* header bar dengan glass morphism */
+/* PANEL HEADER berisi logo kiri, judul tengah, logo kanan */
 .header-wrap {
   background: var(--card);
   backdrop-filter: blur(6px);
   border: 1px solid var(--border);
   border-radius: 18px;
-  padding: 12px 18px;
+  padding: 10px 16px;
   box-shadow: 0 10px 30px rgba(2,8,23,.08), inset 0 1px 0 rgba(255,255,255,.65);
   margin-bottom: 8px;
+}
+/* Flex bar di dalam panel */
+.header-bar{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px;
+}
+/* Slot logo kiri & kanan (di area yang Anda lingkari) */
+.header-logo{
+  display:flex; align-items:center; justify-content:center;
+  width:160px; /* lebar slot; bisa disesuaikan */
+  min-height:72px;
+}
+.header-logo img{
+  max-height:72px;     /* kunci agar tidak terpotong */
+  max-width:150px;
+  width:auto; height:auto;
+  object-fit:contain;  /* pastikan tidak crop */
+  display:block;
+}
+/* Tengah: judul */
+.header-center{
+  flex:1; text-align:center;
+}
+.header-title{
+  margin:0; font-weight:900; letter-spacing:.2px; color:#0b1220; font-size:34px;
+}
+.header-sub{
+  font-size:.95rem; color: var(--muted); margin-top:2px;
+}
+
+/* Responsif */
+@media (max-width: 992px){
+  .header-logo{ width:120px; }
+  .header-logo img{ max-height:60px; max-width:110px; }
+  .header-title{ font-size:28px; }
+}
+@media (max-width: 680px){
+  .header-bar{ gap:8px; }
+  .header-logo{ width:90px; min-height:54px; }
+  .header-logo img{ max-height:50px; max-width:90px; }
+  .header-title{ font-size:24px; }
 }
 
 /* kartu metric */
@@ -90,14 +129,10 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
   background: linear-gradient(90deg, var(--ink), #1d4ed8);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
-
-/* section title */
 .section-title{
   font-weight:800; letter-spacing:.2px; font-size:1.05rem;
   color: var(--ink-soft); margin:.35rem 0 .5rem;
 }
-
-/* tweak dataframes & widgets */
 div[data-testid="stDataFrame"] { border: 1px solid var(--border); border-radius: 14px; }
 </style>
 """, unsafe_allow_html=True)
@@ -192,40 +227,30 @@ def yolo_annotate(bgr_image: np.ndarray, model: YOLO, conf: float, iou: float, i
     annotated = results[0].plot()
     return annotated, results[0]
 
-# ---------- Helper supaya logo TIDAK terpotong (rasio tetap) ----------
-def show_logo(path: str, target_height_px: int = 96, caption: str | None = None):
-    """
-    Menampilkan logo dengan menjaga rasio (tanpa cropping) dengan tinggi target.
-    Jika gambar besar, akan dikecilkan proporsional ke height target.
-    """
-    img = PILImage.open(path)
-    w, h = img.size
-    # hitung lebar yang setara untuk tinggi target
-    width = int(max(1, w * (target_height_px / float(h))))
-    st.image(img, width=width, caption=caption)
-
-# -------------------- Header dengan logo kiri-kanan --------------------
+# -------------------- Header: logo di DALAM panel judul --------------------
 def app_header():
-    c1, c2, c3 = st.columns([1.2, 5, 1.2], gap="small")
-    with c1:
-        if Path("logoseg.png").exists():
-            show_logo("logoseg.png", target_height_px=96)
-    with c2:
-        st.markdown(
-            """
-            <div class="header-wrap" style="text-align:center;">
-              <h1 style="margin:0;font-weight:900;letter-spacing:.2px;color:#0b1220;">
-                UHTP Smart Egg Incubator
-              </h1>
-              <div style="font-size:.95rem;color:var(--muted);margin-top:2px;">
-                Real-time monitoring • Control • Analytics
-              </div>
+    # Kedua file logo opsional; jika ada akan ditampilkan
+    left_logo  = "logoseg.png"       # kiri
+    right_logo = "logosponsor.png"   # kanan
+
+    left_img_html  = f"<img src='{left_logo}' alt='logo kiri'>" if Path(left_logo).exists() else ""
+    right_img_html = f"<img src='{right_logo}' alt='logo kanan'>" if Path(right_logo).exists() else ""
+
+    st.markdown(
+        f"""
+        <div class="header-wrap">
+          <div class="header-bar">
+            <div class="header-logo">{left_img_html}</div>
+            <div class="header-center">
+              <h1 class="header-title">UHTP Smart Egg Incubator</h1>
+              <div class="header-sub">Real-time monitoring • Control • Analytics</div>
             </div>
-            """, unsafe_allow_html=True
-        )
-    with c3:
-        if Path("logosponsor.png").exists():
-            show_logo("logosponsor.png", target_height_px=96)
+            <div class="header-logo">{right_img_html}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 app_header()
 
@@ -257,7 +282,7 @@ if mode == "Monitoring (Google Sheet)":
         latest = df.iloc[-1]
 
         colA, colB, colC, colD, colE = st.columns(5)
-        # Kartu metric custom (🌡️ & 💧)
+        # Kartu metric custom
         def metric_card(col, title, value, icon=None, accent="var(--brand)"):
             with col:
                 st.markdown(f"""
@@ -267,19 +292,14 @@ if mode == "Monitoring (Google Sheet)":
                 </div>
                 """, unsafe_allow_html=True)
 
-        # Suhu
         if "Suhu Udara (°C)" in df.columns and pd.notna(latest.get("Suhu Udara (°C)")):
             metric_card(colA, "Suhu Udara (°C)", f"{latest['Suhu Udara (°C)']:.1f}", "🌡️", "#38bdf8")
-        # Kelembaban RH
         if "Kelembaban Udara RH (%)" in df.columns and pd.notna(latest.get("Kelembaban Udara RH (%)")):
             metric_card(colB, "Kelembaban Udara RH (%)", f"{latest['Kelembaban Udara RH (%)']:.1f}", "💧", "#34d399")
-        # Curah hujan
         if "Curah Hujan (mm)" in df.columns and pd.notna(latest.get("Curah Hujan (mm)")):
             metric_card(colC, "Curah Hujan (mm)", f"{latest['Curah Hujan (mm)']:.1f}", "☔", "#a78bfa")
-        # Angin
         if "Kecepatan Angin (m/s)" in df.columns and pd.notna(latest.get("Kecepatan Angin (m/s)")):
             metric_card(colD, "Kecepatan Angin (m/s)", f"{latest['Kecepatan Angin (m/s)']:.1f}", "↯", "#fb7185")
-        # Kelembaban tanah
         if "Kelembaban Tanah (%)" in df.columns and pd.notna(latest.get("Kelembaban Tanah (%)")):
             metric_card(colE, "Kelembaban Tanah (%)", f"{latest['Kelembaban Tanah (%)']:.1f}", "🧪", "#f59e0b")
 
@@ -405,4 +425,3 @@ else:
             st.video(t_out.name)
             with open(t_out.name, "rb") as f:
                 st.download_button("Download hasil (MP4)", f, file_name="deteksi.mp4", mime="video/mp4")
-
