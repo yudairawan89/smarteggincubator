@@ -272,7 +272,7 @@ with st.sidebar:
     mode = st.radio("Mode", ["Monitoring (Suhu & Kelembaban)", "Live Camera", "Gambar (Upload)", "Video (Upload)"], index=0)
 
 # -------------------- MODE: Monitoring (default) --------------------
-if mode == "Monitoring (Google Sheet)":
+if mode == "Monitoring (Suhu & Kelembaban)":
     csv_url = sheet_url_to_csv(SHEET_URL)
     if st_autorefresh and AUTO_REFRESH_SEC and AUTO_REFRESH_SEC > 0:
         st_autorefresh(interval=AUTO_REFRESH_SEC * 1000, key="gsheet_refresh")
@@ -429,4 +429,5 @@ else:
             st.video(t_out.name)
             with open(t_out.name, "rb") as f:
                 st.download_button("Download hasil (MP4)", f, file_name="deteksi.mp4", mime="video/mp4")
+
 
