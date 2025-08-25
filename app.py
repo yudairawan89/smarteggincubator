@@ -23,33 +23,24 @@ except Exception:
     st_autorefresh = None
 
 # ======== Konfigurasi ========
-MODEL_PATH = "best.pt"     # dipakai internal; input user dihapus
+MODEL_PATH = "best.pt"     # path model internal
 DEFAULT_IMGSZ = 800
-RTC_CONFIG = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-)
+RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
 
-# Google Sheet (fixed / tanpa input sidebar)
+# Google Sheet (fixed)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ssnVf_JS_KrlNYKfSHlxHwttwtntqTY3NdB8KbYrgrQ/edit?usp=sharing"
-AUTO_REFRESH_SEC = 10  # 0 untuk nonaktif
+AUTO_REFRESH_SEC = 10  # 0 = nonaktif
 TZ_ID = "Asia/Jakarta"
 # =============================
 
-# -------------------- Styling Cerah & Elegan --------------------
+# -------------------- Styling --------------------
 st.set_page_config(page_title="UHTP Smart Egg Incubator", layout="wide", page_icon="🥚")
 st.markdown("""
 <style>
 :root{
-  --brand:#0ea5e9;          /* sky-500 */
-  --brand-2:#22c55e;        /* green-500 */
-  --ink:#0f172a;            /* slate-900 */
-  --ink-soft:#334155;       /* slate-700 */
-  --text:#0b1220;           /* nearly black */
-  --muted:#475569;          /* slate-600 */
-  --card:#ffffffcc;         /* white glass */
-  --border:#e5e7eb;         /* gray-200 */
+  --brand:#0ea5e9; --brand-2:#22c55e; --ink:#0f172a; --ink-soft:#334155;
+  --text:#0b1220; --muted:#475569; --card:#ffffffcc; --border:#e5e7eb;
 }
-
 html, body, .stApp {
   background:
     radial-gradient(900px 600px at 10% 0%, rgba(56,189,248,.20), transparent 60%),
@@ -60,102 +51,75 @@ html, body, .stApp {
 header, .block-container { padding-top: .5rem; }
 h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
 
-/* ================= HEADER PANEL ================= */
-.header-wrap {
+/* ===== Header panel satu kesatuan (logo kiri - judul - logo kanan) ===== */
+.header-wrap{
+  width:100%;
   background: var(--card);
   backdrop-filter: blur(6px);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 10px 16px;
-  box-shadow: 0 10px 30px rgba(2,8,23,.08), inset 0 1px 0 rgba(255,255,255,.65);
-  margin-bottom: 8px;
-  overflow: visible; /* cegah crop */
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:14px 18px;
+  box-shadow:0 10px 30px rgba(2,8,23,.08), inset 0 1px 0 rgba(255,255,255,.65);
+  margin-bottom:8px;
+  box-sizing:border-box;
 }
-.header-bar{
-  display:flex; align-items:center; justify-content:space-between;
+.header-grid{
+  display:grid;
+  grid-template-columns: 170px 1fr 170px;  /* slot kiri - tengah - kanan */
+  align-items:center;
   gap:16px;
 }
 .header-logo{
   display:flex; align-items:center; justify-content:center;
-  width: 170px;                 /* lebar slot kiri/kanan */
-  min-height: 78px;             /* tinggi slot agar panel cukup tinggi */
-  padding: 4px 0;               /* ruang atas-bawah agar tidak mentok */
+  min-height:78px;                 /* naikkan tinggi panel agar logo tidak kepotong */
+  padding:4px 0;
 }
 .header-logo img{
-  max-height: 72px;             /* atur ukuran logo di dalam panel */
-  width:auto; height:auto;
-  object-fit: contain;           /* jangan dipotong */
-  display:block;
+  max-height:72px;                 /* BESAR logo dalam panel */
+  width:auto; height:auto; display:block; object-fit:contain;
 }
-.header-center{
-  flex:1; text-align:center;
-}
-.header-title{
-  margin:0; font-weight:900; letter-spacing:.2px; color:#0b1220; font-size:34px;
-}
-.header-sub{
-  font-size:.95rem; color: var(--muted); margin-top:2px;
-}
+.header-center{ text-align:center; }
+.header-title{ margin:0; font-weight:900; letter-spacing:.2px; color:#0b1220; font-size:34px; }
+.header-sub{ font-size:.95rem; color:var(--muted); margin-top:2px; }
 
 /* Responsif */
 @media (max-width: 992px){
-  .header-logo{ width:130px; min-height:68px; }
+  .header-grid{ grid-template-columns: 130px 1fr 130px; }
+  .header-logo{ min-height:68px; }
   .header-logo img{ max-height:60px; }
   .header-title{ font-size:28px; }
 }
 @media (max-width: 680px){
-  .header-logo{ width:96px; min-height:56px; }
+  .header-grid{ grid-template-columns: 96px 1fr 96px; }
+  .header-logo{ min-height:56px; }
   .header-logo img{ max-height:50px; }
   .header-title{ font-size:24px; }
 }
 
-/* ================= METRIC & LAINNYA ================= */
-.metric-card{
-  background: var(--card);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 14px 16px;
-  box-shadow: 0 8px 24px rgba(2,8,23,.06);
-}
-.metric-title{
-  font-size: .92rem; color: var(--muted);
-  display:flex; gap:.5rem; align-items:center;
-}
-.metric-value{
-  font-size: 2.15rem; font-weight: 800; letter-spacing:.2px;
-  background: linear-gradient(90deg, var(--ink), #1d4ed8);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.section-title{
-  font-weight:800; letter-spacing:.2px; font-size:1.05rem;
-  color: var(--ink-soft); margin:.35rem 0 .5rem;
-}
-div[data-testid="stDataFrame"] { border: 1px solid var(--border); border-radius: 14px; }
+/* Kartu metric & lainnya */
+.metric-card{ background:var(--card); backdrop-filter:blur(6px); border:1px solid var(--border);
+  border-radius:16px; padding:14px 16px; box-shadow:0 8px 24px rgba(2,8,23,.06); }
+.metric-title{ font-size:.92rem; color:var(--muted); display:flex; gap:.5rem; align-items:center; }
+.metric-value{ font-size:2.15rem; font-weight:800; letter-spacing:.2px;
+  background:linear-gradient(90deg, var(--ink), #1d4ed8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.section-title{ font-weight:800; letter-spacing:.2px; font-size:1.05rem; color:var(--ink-soft); margin:.35rem 0 .5rem; }
+div[data-testid="stDataFrame"]{ border:1px solid var(--border); border-radius:14px; }
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------- Utils --------------------
 def sheet_url_to_csv(url: str):
-    """Ubah URL Google Sheet biasa menjadi export CSV."""
-    if not url:
-        return None
-    if "export?format=csv" in url or "gviz/tq" in url:
-        return url
-    if "docs.google.com/spreadsheets/d/" not in url:
-        return None
-    try:
-        sid = url.split("/spreadsheets/d/")[1].split("/")[0]
-    except Exception:
-        return None
+    if not url: return None
+    if "export?format=csv" in url or "gviz/tq" in url: return url
+    if "docs.google.com/spreadsheets/d/" not in url: return None
+    try: sid = url.split("/spreadsheets/d/")[1].split("/")[0]
+    except Exception: return None
     gid = "0"
-    if "#gid=" in url:
-        gid = url.split("#gid=")[1].split("&")[0]
+    if "#gid=" in url: gid = url.split("#gid=")[1].split("&")[0]
     return f"https://docs.google.com/spreadsheets/d/{sid}/export?format=csv&gid={gid}"
 
 @st.cache_data(show_spinner=False, ttl=10)
 def load_sheet(csv_url: str) -> pd.DataFrame:
-    """Baca CSV publik dari Google Sheet dan normalisasi kolom."""
     df = pd.read_csv(csv_url)
     df.columns = [c.strip().lower() for c in df.columns]
 
@@ -195,18 +159,14 @@ def load_sheet(csv_url: str) -> pd.DataFrame:
     return df
 
 def format_wib(ts) -> str:
-    """Format contoh: 22 Agustus 2025, jam 13:45:03 WIB."""
-    if ts is None or pd.isna(ts):
-        return "-"
+    if ts is None or pd.isna(ts): return "-"
     tz = pytz.timezone(TZ_ID)
-    if isinstance(ts, str):
-        ts = pd.to_datetime(ts, errors="coerce")
+    if isinstance(ts, str): ts = pd.to_datetime(ts, errors="coerce")
     if getattr(ts, "tzinfo", None) is None:
         dt = tz.localize(pd.Timestamp(ts).to_pydatetime())
     else:
         dt = ts.tz_convert(tz).to_pydatetime()
-    months = ["Januari","Februari","Maret","April","Mei","Juni",
-              "Juli","Agustus","September","Oktober","November","Desember"]
+    months = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"]
     return f"{dt.day} {months[dt.month-1]} {dt.year}, jam {dt:%H:%M:%S} WIB"
 
 @st.cache_resource(show_spinner=True)
@@ -225,28 +185,25 @@ def yolo_annotate(bgr_image: np.ndarray, model: YOLO, conf: float, iou: float, i
     annotated = results[0].plot()
     return annotated, results[0]
 
-# ---------- helper: gambar -> data URI untuk dipakai di HTML ----------
+# -------- helper: gambar -> data URI (agar img tampil di dalam panel HTML) --------
 def img_to_data_uri(path: str) -> str | None:
     p = Path(path)
-    if not p.exists():
-        return None
+    if not p.exists(): return None
     mime = "image/png" if p.suffix.lower() == ".png" else "image/jpeg"
-    with open(p, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("utf-8")
+    with open(p, "rb") as f: b64 = base64.b64encode(f.read()).decode("utf-8")
     return f"data:{mime};base64,{b64}"
 
-# -------------------- Header: logo dan judul DI DALAM panel --------------------
+# -------------------- Header (logo & judul satu panel) --------------------
 def app_header():
     left_uri  = img_to_data_uri("logoseg.png")
     right_uri = img_to_data_uri("logosponsor.png")
-
     left_img_html  = f"<img src='{left_uri}' alt='logo kiri'/>" if left_uri else ""
     right_img_html = f"<img src='{right_uri}' alt='logo kanan'/>" if right_uri else ""
 
     st.markdown(
         f"""
         <div class="header-wrap">
-          <div class="header-bar">
+          <div class="header-grid">
             <div class="header-logo">{left_img_html}</div>
             <div class="header-center">
               <h1 class="header-title">UHTP Smart Egg Incubator</h1>
@@ -261,18 +218,19 @@ def app_header():
 
 app_header()
 
-# -------------------- Sidebar (tanpa input path model) --------------------
+# -------------------- Sidebar --------------------
 with st.sidebar:
     st.header("Pengaturan")
     conf_thres = st.slider("Confidence", 0.05, 0.95, 0.30, 0.01)
-    iou_thres  = st.slider("IoU",        0.10, 0.95, 0.60, 0.01)
+    iou_thres  = st.slider("IoU", 0.10, 0.95, 0.60, 0.01)
     imgsz      = st.select_slider("Image size", options=[640, 800, 960], value=DEFAULT_IMGSZ)
     st.caption("Mode deteksi menggunakan model bawaan.")
     st.divider()
-    mode = st.radio("Mode", ["Monitoring (Suhu & Kelembaban)", "Live Camera", "Gambar (Upload)", "Video (Upload)"], index=0)
+    # >>> perubahan nama mode
+    mode = st.radio("Mode", ["Monitoring (Suhu dan Kelembaban)", "Live Camera", "Gambar (Upload)", "Video (Upload)"], index=0)
 
-# -------------------- MODE: Monitoring (default) --------------------
-if mode == "Monitoring (Suhu & Kelembaban)":
+# -------------------- MODE: Monitoring --------------------
+if mode == "Monitoring (Suhu dan Kelembaban)":
     csv_url = sheet_url_to_csv(SHEET_URL)
     if st_autorefresh and AUTO_REFRESH_SEC and AUTO_REFRESH_SEC > 0:
         st_autorefresh(interval=AUTO_REFRESH_SEC * 1000, key="gsheet_refresh")
@@ -289,7 +247,7 @@ if mode == "Monitoring (Suhu & Kelembaban)":
         latest = df.iloc[-1]
 
         colA, colB, colC, colD, colE = st.columns(5)
-        # Kartu metric custom
+
         def metric_card(col, title, value, icon=None, accent="var(--brand)"):
             with col:
                 st.markdown(f"""
@@ -350,10 +308,7 @@ elif mode == "Live Camera":
             annotated, _ = yolo_annotate(img, model, self.conf, self.iou, self.imgsz)
             return av.VideoFrame.from_ndarray(annotated, format="bgr24")
 
-    constraints = {
-        "video": {"width": {"ideal": width_opt}, "height": {"ideal": height_opt}},
-        "audio": False
-    }
+    constraints = {"video": {"width": {"ideal": width_opt}, "height": {"ideal": height_opt}}, "audio": False}
 
     webrtc_streamer(
         key="yolov12-live",
@@ -396,8 +351,7 @@ else:
         t_in.write(file.read()); t_in.flush(); t_in.close()
 
         st.info("Memproses video… (akan menghasilkan video dengan bounding box)")
-        prog = st.progress(0)
-        status = st.empty()
+        prog = st.progress(0); status = st.empty()
 
         cap = cv2.VideoCapture(t_in.name)
         if not cap.isOpened():
@@ -415,19 +369,15 @@ else:
             i = 0
             while True:
                 ok, frame = cap.read()
-                if not ok:
-                    break
+                if not ok: break
                 annotated, _ = yolo_annotate(frame, model, conf_thres, iou_thres, imgsz)
                 writer.write(annotated)
                 i += 1
                 if total > 0:
-                    prog.progress(min(i/total, 1.0))
-                    status.text(f"Frame {i}/{total}")
+                    prog.progress(min(i/total, 1.0)); status.text(f"Frame {i}/{total}")
             writer.release(); cap.release()
             prog.progress(1.0); status.text("Selesai ✅")
 
             st.video(t_out.name)
             with open(t_out.name, "rb") as f:
                 st.download_button("Download hasil (MP4)", f, file_name="deteksi.mp4", mime="video/mp4")
-
-
