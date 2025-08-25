@@ -51,7 +51,7 @@ html, body, .stApp {
 header, .block-container { padding-top: .5rem; }
 h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
 
-/* ===== Header panel satu kesatuan (logo kiri - judul - logo kanan) ===== */
+/* ===== Header panel (logo kiri - judul - logo kanan) ===== */
 .header-wrap{
   width:100%;
   background: var(--card);
@@ -65,34 +65,42 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
 }
 .header-grid{
   display:grid;
-  grid-template-columns: 170px 1fr 170px;  /* slot kiri - tengah - kanan */
+  grid-template-columns: 190px 1fr 170px;  /* slot kiri dibesarkan */
   align-items:center;
   gap:16px;
 }
 .header-logo{
   display:flex; align-items:center; justify-content:center;
-  min-height:78px;                 /* naikkan tinggi panel agar logo tidak kepotong */
+  min-height:78px;
   padding:4px 0;
 }
 .header-logo img{
-  max-height:72px;                 /* BESAR logo dalam panel */
+  max-height:72px;                 /* default ukuran logo dalam panel */
   width:auto; height:auto; display:block; object-fit:contain;
 }
+/* Perbesar hanya logo kiri (logoseg) */
+.header-logo.left img{ max-height:88px; }
+.header-logo.left{ min-height:96px; }
+
 .header-center{ text-align:center; }
 .header-title{ margin:0; font-weight:900; letter-spacing:.2px; color:#0b1220; font-size:34px; }
 .header-sub{ font-size:.95rem; color:var(--muted); margin-top:2px; }
 
 /* Responsif */
 @media (max-width: 992px){
-  .header-grid{ grid-template-columns: 130px 1fr 130px; }
+  .header-grid{ grid-template-columns: 140px 1fr 130px; }
   .header-logo{ min-height:68px; }
   .header-logo img{ max-height:60px; }
+  .header-logo.left img{ max-height:72px; }
+  .header-logo.left{ min-height:80px; }
   .header-title{ font-size:28px; }
 }
 @media (max-width: 680px){
-  .header-grid{ grid-template-columns: 96px 1fr 96px; }
+  .header-grid{ grid-template-columns: 110px 1fr 100px; }
   .header-logo{ min-height:56px; }
   .header-logo img{ max-height:50px; }
+  .header-logo.left img{ max-height:60px; }
+  .header-logo.left{ min-height:66px; }
   .header-title{ font-size:24px; }
 }
 
@@ -204,12 +212,12 @@ def app_header():
         f"""
         <div class="header-wrap">
           <div class="header-grid">
-            <div class="header-logo">{left_img_html}</div>
+            <div class="header-logo left">{left_img_html}</div>
             <div class="header-center">
               <h1 class="header-title">UHTP Smart Egg Incubator</h1>
               <div class="header-sub">Real-time monitoring • Control • Analytics</div>
             </div>
-            <div class="header-logo">{right_img_html}</div>
+            <div class="header-logo right">{right_img_html}</div>
           </div>
         </div>
         """,
@@ -226,7 +234,7 @@ with st.sidebar:
     imgsz      = st.select_slider("Image size", options=[640, 800, 960], value=DEFAULT_IMGSZ)
     st.caption("Mode deteksi menggunakan model bawaan.")
     st.divider()
-    # >>> perubahan nama mode
+    # Nama mode diubah
     mode = st.radio("Mode", ["Monitoring (Suhu dan Kelembaban)", "Live Camera", "Gambar (Upload)", "Video (Upload)"], index=0)
 
 # -------------------- MODE: Monitoring --------------------
