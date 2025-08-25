@@ -25,7 +25,7 @@ except Exception:
 # ======== Konfigurasi ========
 MODEL_PATH = "best.pt"     # dipakai internal; input user dihapus
 DEFAULT_IMGSZ = 800
-RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"}]})
+RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
 
 # Google Sheet (fixed / tanpa input sidebar)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ssnVf_JS_KrlNYKfSHlxHwttwtntqTY3NdB8KbYrgrQ/edit?usp=sharing"
@@ -405,3 +405,4 @@ else:
             st.video(t_out.name)
             with open(t_out.name, "rb") as f:
                 st.download_button("Download hasil (MP4)", f, file_name="deteksi.mp4", mime="video/mp4")
+
