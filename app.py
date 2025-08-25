@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import base64
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -59,7 +60,7 @@ html, body, .stApp {
 header, .block-container { padding-top: .5rem; }
 h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
 
-/* panel judul */
+/* ================= HEADER PANEL ================= */
 .header-wrap {
   background: var(--card);
   backdrop-filter: blur(6px);
@@ -68,15 +69,47 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
   padding: 10px 16px;
   box-shadow: 0 10px 30px rgba(2,8,23,.08), inset 0 1px 0 rgba(255,255,255,.65);
   margin-bottom: 8px;
+  overflow: visible; /* cegah crop */
 }
-
-/* batasi tinggi logo di kolom kiri/kanan agar rapi */
+.header-bar{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px;
+}
+.header-logo{
+  display:flex; align-items:center; justify-content:center;
+  width: 170px;                 /* lebar slot kiri/kanan */
+  min-height: 78px;             /* tinggi slot agar panel cukup tinggi */
+  padding: 4px 0;               /* ruang atas-bawah agar tidak mentok */
+}
 .header-logo img{
-  max-height: 72px;  /* ubah jika ingin lebih besar/kecil */
-  width: auto;
+  max-height: 72px;             /* atur ukuran logo di dalam panel */
+  width:auto; height:auto;
+  object-fit: contain;           /* jangan dipotong */
+  display:block;
+}
+.header-center{
+  flex:1; text-align:center;
+}
+.header-title{
+  margin:0; font-weight:900; letter-spacing:.2px; color:#0b1220; font-size:34px;
+}
+.header-sub{
+  font-size:.95rem; color: var(--muted); margin-top:2px;
 }
 
-/* kartu metric */
+/* Responsif */
+@media (max-width: 992px){
+  .header-logo{ width:130px; min-height:68px; }
+  .header-logo img{ max-height:60px; }
+  .header-title{ font-size:28px; }
+}
+@media (max-width: 680px){
+  .header-logo{ width:96px; min-height:56px; }
+  .header-logo img{ max-height:50px; }
+  .header-title{ font-size:24px; }
+}
+
+/* ================= METRIC & LAINNYA ================= */
 .metric-card{
   background: var(--card);
   backdrop-filter: blur(6px);
@@ -192,37 +225,39 @@ def yolo_annotate(bgr_image: np.ndarray, model: YOLO, conf: float, iou: float, i
     annotated = results[0].plot()
     return annotated, results[0]
 
-# -------------------- Header: logo tampil via st.image() --------------------
+# ---------- helper: gambar -> data URI untuk dipakai di HTML ----------
+def img_to_data_uri(path: str) -> str | None:
+    p = Path(path)
+    if not p.exists():
+        return None
+    mime = "image/png" if p.suffix.lower() == ".png" else "image/jpeg"
+    with open(p, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+    return f"data:{mime};base64,{b64}"
+
+# -------------------- Header: logo dan judul DI DALAM panel --------------------
 def app_header():
-    # Kolom: logo kiri – judul – logo kanan
-    c1, c2, c3 = st.columns([1.2, 5, 1.2], gap="small")
+    left_uri  = img_to_data_uri("logoseg.png")
+    right_uri = img_to_data_uri("logosponsor.png")
 
-    with c1:
-        st.markdown('<div class="header-wrap header-logo">', unsafe_allow_html=True)
-        if Path("logoseg.png").exists():
-            st.image("logoseg.png", use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    left_img_html  = f"<img src='{left_uri}' alt='logo kiri'/>" if left_uri else ""
+    right_img_html = f"<img src='{right_uri}' alt='logo kanan'/>" if right_uri else ""
 
-    with c2:
-        st.markdown(
-            """
-            <div class="header-wrap">
-              <h1 style="margin:0;font-weight:900;letter-spacing:.2px;color:#0b1220;text-align:center;">
-                UHTP Smart Egg Incubator
-              </h1>
-              <div style="font-size:.95rem;color: var(--muted);margin-top:2px;text-align:center;">
-                Real-time monitoring • Control • Analytics
-              </div>
+    st.markdown(
+        f"""
+        <div class="header-wrap">
+          <div class="header-bar">
+            <div class="header-logo">{left_img_html}</div>
+            <div class="header-center">
+              <h1 class="header-title">UHTP Smart Egg Incubator</h1>
+              <div class="header-sub">Real-time monitoring • Control • Analytics</div>
             </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    with c3:
-        st.markdown('<div class="header-wrap header-logo">', unsafe_allow_html=True)
-        if Path("logosponsor.png").exists():
-            st.image("logosponsor.png", use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+            <div class="header-logo">{right_img_html}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 app_header()
 
