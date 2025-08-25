@@ -269,7 +269,7 @@ with st.sidebar:
     imgsz      = st.select_slider("Image size", options=[640, 800, 960], value=DEFAULT_IMGSZ)
     st.caption("Mode deteksi menggunakan model bawaan.")
     st.divider()
-    mode = st.radio("Mode", ["Monitoring (Google Sheet)", "Live Camera", "Gambar (Upload)", "Video (Upload)"], index=0)
+    mode = st.radio("Mode", ["Monitoring (Suhu & Kelembaban)", "Live Camera", "Gambar (Upload)", "Video (Upload)"], index=0)
 
 # -------------------- MODE: Monitoring (default) --------------------
 if mode == "Monitoring (Google Sheet)":
@@ -429,3 +429,4 @@ else:
             st.video(t_out.name)
             with open(t_out.name, "rb") as f:
                 st.download_button("Download hasil (MP4)", f, file_name="deteksi.mp4", mime="video/mp4")
+
