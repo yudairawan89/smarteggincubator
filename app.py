@@ -8,6 +8,7 @@ import streamlit as st
 import pandas as pd
 import pytz
 from datetime import datetime
+from PIL import Image as PILImage  # <-- untuk kontrol ukuran logo
 
 # webrtc
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
@@ -24,7 +25,7 @@ except Exception:
 # ======== Konfigurasi ========
 MODEL_PATH = "best.pt"     # dipakai internal; input user dihapus
 DEFAULT_IMGSZ = 800
-RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"}]})
 
 # Google Sheet (fixed / tanpa input sidebar)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ssnVf_JS_KrlNYKfSHlxHwttwtntqTY3NdB8KbYrgrQ/edit?usp=sharing"
@@ -191,12 +192,24 @@ def yolo_annotate(bgr_image: np.ndarray, model: YOLO, conf: float, iou: float, i
     annotated = results[0].plot()
     return annotated, results[0]
 
+# ---------- Helper supaya logo TIDAK terpotong (rasio tetap) ----------
+def show_logo(path: str, target_height_px: int = 96, caption: str | None = None):
+    """
+    Menampilkan logo dengan menjaga rasio (tanpa cropping) dengan tinggi target.
+    Jika gambar besar, akan dikecilkan proporsional ke height target.
+    """
+    img = PILImage.open(path)
+    w, h = img.size
+    # hitung lebar yang setara untuk tinggi target
+    width = int(max(1, w * (target_height_px / float(h))))
+    st.image(img, width=width, caption=caption)
+
 # -------------------- Header dengan logo kiri-kanan --------------------
 def app_header():
-    c1, c2, c3 = st.columns([1,3,1], gap="small")
+    c1, c2, c3 = st.columns([1.2, 5, 1.2], gap="small")
     with c1:
         if Path("logoseg.png").exists():
-            st.image("logoseg.png", use_container_width=True)
+            show_logo("logoseg.png", target_height_px=96)
     with c2:
         st.markdown(
             """
@@ -212,7 +225,7 @@ def app_header():
         )
     with c3:
         if Path("logosponsor.png").exists():
-            st.image("logosponsor.png", use_container_width=True)
+            show_logo("logosponsor.png", target_height_px=96)
 
 app_header()
 
