@@ -59,7 +59,7 @@ html, body, .stApp {
 header, .block-container { padding-top: .5rem; }
 h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
 
-/* PANEL HEADER berisi logo kiri, judul tengah, logo kanan */
+/* panel judul */
 .header-wrap {
   background: var(--card);
   backdrop-filter: blur(6px);
@@ -69,46 +69,11 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
   box-shadow: 0 10px 30px rgba(2,8,23,.08), inset 0 1px 0 rgba(255,255,255,.65);
   margin-bottom: 8px;
 }
-/* Flex bar di dalam panel */
-.header-bar{
-  display:flex; align-items:center; justify-content:space-between;
-  gap:16px;
-}
-/* Slot logo kiri & kanan (di area yang Anda lingkari) */
-.header-logo{
-  display:flex; align-items:center; justify-content:center;
-  width:160px; /* lebar slot; bisa disesuaikan */
-  min-height:72px;
-}
-.header-logo img{
-  max-height:72px;     /* kunci agar tidak terpotong */
-  max-width:150px;
-  width:auto; height:auto;
-  object-fit:contain;  /* pastikan tidak crop */
-  display:block;
-}
-/* Tengah: judul */
-.header-center{
-  flex:1; text-align:center;
-}
-.header-title{
-  margin:0; font-weight:900; letter-spacing:.2px; color:#0b1220; font-size:34px;
-}
-.header-sub{
-  font-size:.95rem; color: var(--muted); margin-top:2px;
-}
 
-/* Responsif */
-@media (max-width: 992px){
-  .header-logo{ width:120px; }
-  .header-logo img{ max-height:60px; max-width:110px; }
-  .header-title{ font-size:28px; }
-}
-@media (max-width: 680px){
-  .header-bar{ gap:8px; }
-  .header-logo{ width:90px; min-height:54px; }
-  .header-logo img{ max-height:50px; max-width:90px; }
-  .header-title{ font-size:24px; }
+/* batasi tinggi logo di kolom kiri/kanan agar rapi */
+.header-logo img{
+  max-height: 72px;  /* ubah jika ingin lebih besar/kecil */
+  width: auto;
 }
 
 /* kartu metric */
@@ -227,30 +192,37 @@ def yolo_annotate(bgr_image: np.ndarray, model: YOLO, conf: float, iou: float, i
     annotated = results[0].plot()
     return annotated, results[0]
 
-# -------------------- Header: logo di DALAM panel judul --------------------
+# -------------------- Header: logo tampil via st.image() --------------------
 def app_header():
-    # Kedua file logo opsional; jika ada akan ditampilkan
-    left_logo  = "logoseg.png"       # kiri
-    right_logo = "logosponsor.png"   # kanan
+    # Kolom: logo kiri – judul – logo kanan
+    c1, c2, c3 = st.columns([1.2, 5, 1.2], gap="small")
 
-    left_img_html  = f"<img src='{left_logo}' alt='logo kiri'>" if Path(left_logo).exists() else ""
-    right_img_html = f"<img src='{right_logo}' alt='logo kanan'>" if Path(right_logo).exists() else ""
+    with c1:
+        st.markdown('<div class="header-wrap header-logo">', unsafe_allow_html=True)
+        if Path("logoseg.png").exists():
+            st.image("logoseg.png", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown(
-        f"""
-        <div class="header-wrap">
-          <div class="header-bar">
-            <div class="header-logo">{left_img_html}</div>
-            <div class="header-center">
-              <h1 class="header-title">UHTP Smart Egg Incubator</h1>
-              <div class="header-sub">Real-time monitoring • Control • Analytics</div>
+    with c2:
+        st.markdown(
+            """
+            <div class="header-wrap">
+              <h1 style="margin:0;font-weight:900;letter-spacing:.2px;color:#0b1220;text-align:center;">
+                UHTP Smart Egg Incubator
+              </h1>
+              <div style="font-size:.95rem;color: var(--muted);margin-top:2px;text-align:center;">
+                Real-time monitoring • Control • Analytics
+              </div>
             </div>
-            <div class="header-logo">{right_img_html}</div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+            """,
+            unsafe_allow_html=True
+        )
+
+    with c3:
+        st.markdown('<div class="header-wrap header-logo">', unsafe_allow_html=True)
+        if Path("logosponsor.png").exists():
+            st.image("logosponsor.png", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
 app_header()
 
@@ -344,10 +316,7 @@ elif mode == "Live Camera":
             return av.VideoFrame.from_ndarray(annotated, format="bgr24")
 
     constraints = {
-        "video": {
-            "width": {"ideal": width_opt},
-            "height": {"ideal": height_opt}
-        },
+        "video": {"width": {"ideal": width_opt}, "height": {"ideal": height_opt}},
         "audio": False
     }
 
