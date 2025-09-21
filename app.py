@@ -9,7 +9,6 @@ import streamlit as st
 import pandas as pd
 import pytz
 from datetime import datetime
-from typing import Optional  # ✅ untuk Optional[str]
 
 # webrtc
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
@@ -66,7 +65,7 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
 }
 .header-grid{
   display:grid;
-  grid-template-columns: 190px 1fr 170px;
+  grid-template-columns: 190px 1fr 170px;  /* slot kiri dibesarkan */
   align-items:center;
   gap:16px;
 }
@@ -76,7 +75,7 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink) !important; }
   padding:4px 0;
 }
 .header-logo img{
-  max-height:72px;
+  max-height:72px;                 /* default ukuran logo dalam panel */
   width:auto; height:auto; display:block; object-fit:contain;
 }
 /* Perbesar hanya logo kiri (logoseg) */
@@ -194,15 +193,15 @@ def yolo_annotate(bgr_image: np.ndarray, model: YOLO, conf: float, iou: float, i
     annotated = results[0].plot()
     return annotated, results[0]
 
-# -------- helper: gambar -> data URI --------
-def img_to_data_uri(path: str) -> Optional[str]:   # ✅ diperbaiki
+# -------- helper: gambar -> data URI (agar img tampil di dalam panel HTML) --------
+def img_to_data_uri(path: str) -> str | None:
     p = Path(path)
     if not p.exists(): return None
     mime = "image/png" if p.suffix.lower() == ".png" else "image/jpeg"
     with open(p, "rb") as f: b64 = base64.b64encode(f.read()).decode("utf-8")
     return f"data:{mime};base64,{b64}"
 
-# -------------------- Header --------------------
+# -------------------- Header (logo & judul satu panel) --------------------
 def app_header():
     left_uri  = img_to_data_uri("logoseg.png")
     right_uri = img_to_data_uri("logosponsor.png")
@@ -235,7 +234,158 @@ with st.sidebar:
     imgsz      = st.select_slider("Image size", options=[640, 800, 960], value=DEFAULT_IMGSZ)
     st.caption("Mode deteksi menggunakan model bawaan.")
     st.divider()
+    # Nama mode diubah
     mode = st.radio("Mode", ["Monitoring (Suhu dan Kelembaban)", "Live Camera", "Gambar (Upload)", "Video (Upload)"], index=0)
 
 # -------------------- MODE: Monitoring --------------------
-# ... (lanjutan script Anda tetap sama, hanya bagian Optional[str] yang diubah)
+if mode == "Monitoring (Suhu dan Kelembaban)":
+    csv_url = sheet_url_to_csv(SHEET_URL)
+    if st_autorefresh and AUTO_REFRESH_SEC and AUTO_REFRESH_SEC > 0:
+        st_autorefresh(interval=AUTO_REFRESH_SEC * 1000, key="gsheet_refresh")
+
+    try:
+        df = load_sheet(csv_url)
+    except Exception as e:
+        st.error(f"Gagal memuat Sheet: {e}")
+        st.stop()
+
+    if df.empty:
+        st.warning("Sheet kosong atau belum ada data.")
+    else:
+        latest = df.iloc[-1]
+
+        colA, colB, colC, colD, colE = st.columns(5)
+
+        def metric_card(col, title, value, icon=None, accent="var(--brand)"):
+            with col:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left:6px solid {accent}">
+                  <div class="metric-title">{icon or ''} {title}</div>
+                  <div class="metric-value">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        if "Suhu Udara (°C)" in df.columns and pd.notna(latest.get("Suhu Udara (°C)")):
+            metric_card(colA, "Suhu Udara (°C)", f"{latest['Suhu Udara (°C)']:.1f}", "🌡️", "#38bdf8")
+        if "Kelembaban Udara RH (%)" in df.columns and pd.notna(latest.get("Kelembaban Udara RH (%)")):
+            metric_card(colB, "Kelembaban Udara RH (%)", f"{latest['Kelembaban Udara RH (%)']:.1f}", "💧", "#34d399")
+        if "Curah Hujan (mm)" in df.columns and pd.notna(latest.get("Curah Hujan (mm)")):
+            metric_card(colC, "Curah Hujan (mm)", f"{latest['Curah Hujan (mm)']:.1f}", "☔", "#a78bfa")
+        if "Kecepatan Angin (m/s)" in df.columns and pd.notna(latest.get("Kecepatan Angin (m/s)")):
+            metric_card(colD, "Kecepatan Angin (m/s)", f"{latest['Kecepatan Angin (m/s)']:.1f}", "↯", "#fb7185")
+        if "Kelembaban Tanah (%)" in df.columns and pd.notna(latest.get("Kelembaban Tanah (%)")):
+            metric_card(colE, "Kelembaban Tanah (%)", f"{latest['Kelembaban Tanah (%)']:.1f}", "🧪", "#f59e0b")
+
+        st.caption(f"Terakhir diperbarui: **{format_wib(latest['Timestamp'])}**")
+
+        st.divider()
+        col1, col2 = st.columns(2, gap="large")
+        if "Suhu Udara (°C)" in df.columns:
+            with col1:
+                st.markdown('<div class="section-title">Trend Suhu Udara (°C)</div>', unsafe_allow_html=True)
+                ch = df[["Timestamp","Suhu Udara (°C)"]].dropna().set_index("Timestamp").tail(200)
+                st.line_chart(ch)
+        if "Kelembaban Udara RH (%)" in df.columns:
+            with col2:
+                st.markdown('<div class="section-title">Trend Kelembaban Udara RH (%)</div>', unsafe_allow_html=True)
+                ch = df[["Timestamp","Kelembaban Udara RH (%)"]].dropna().set_index("Timestamp").tail(200)
+                st.line_chart(ch)
+
+        st.markdown('<div class="section-title">Data Terbaru</div>', unsafe_allow_html=True)
+        show_cols = [c for c in ["Timestamp", "Suhu Udara (°C)", "Kelembaban Udara RH (%)",
+                                 "Curah Hujan (mm)", "Kecepatan Angin (m/s)", "Kelembaban Tanah (%)"] if c in df.columns]
+        st.dataframe(df[show_cols].tail(100), use_container_width=True)
+
+# -------------------- MODE: Live Camera --------------------
+elif mode == "Live Camera":
+    model = load_model(MODEL_PATH)
+
+    st.subheader("📷 Live Camera")
+    st.write("Pilih resolusi, lalu Start.")
+
+    width_opt  = st.selectbox("Width",  [640, 800, 960, 1280], index=3)
+    height_opt = st.selectbox("Height", [480, 600, 720, 960], index=2)
+
+    class LiveProcessor(VideoProcessorBase):
+        def __init__(self):
+            self.conf = conf_thres
+            self.iou  = iou_thres
+            self.imgsz = imgsz
+        def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+            img = frame.to_ndarray(format="bgr24")
+            annotated, _ = yolo_annotate(img, model, self.conf, self.iou, self.imgsz)
+            return av.VideoFrame.from_ndarray(annotated, format="bgr24")
+
+    constraints = {"video": {"width": {"ideal": width_opt}, "height": {"ideal": height_opt}}, "audio": False}
+
+    webrtc_streamer(
+        key="yolov12-live",
+        mode=WebRtcMode.SENDRECV,
+        rtc_configuration=RTC_CONFIG,
+        media_stream_constraints=constraints,
+        video_processor_factory=LiveProcessor,
+    )
+
+# -------------------- MODE: Gambar (Upload) --------------------
+elif mode == "Gambar (Upload)":
+    model = load_model(MODEL_PATH)
+
+    st.subheader("🖼️ Deteksi dari Gambar")
+    file = st.file_uploader("Upload gambar", type=["jpg","jpeg","png","bmp","webp","tif","tiff"])
+    if file is not None:
+        bytes_data = np.frombuffer(file.read(), np.uint8)
+        bgr = cv2.imdecode(bytes_data, cv2.IMREAD_COLOR)
+        if bgr is None:
+            st.error("Gagal membaca gambar.")
+        else:
+            annotated, res = yolo_annotate(bgr, model, conf_thres, iou_thres, imgsz)
+            st.image(cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB), caption="Hasil deteksi", use_container_width=True)
+            st.write("Deteksi per kelas:")
+            names = res.names
+            counts = {}
+            for b in res.boxes:
+                cls_id = int(b.cls[0].item())
+                counts[names[cls_id]] = counts.get(names[cls_id], 0) + 1
+            st.json(counts if counts else {"(tidak ada deteksi)": 0})
+
+# -------------------- MODE: Video (Upload) --------------------
+else:
+    model = load_model(MODEL_PATH)
+
+    st.subheader("🎞️ Deteksi dari Video (Upload)")
+    file = st.file_uploader("Upload video", type=["mp4","mov","avi","mkv","webm"])
+    if file is not None:
+        t_in = tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.name).suffix)
+        t_in.write(file.read()); t_in.flush(); t_in.close()
+
+        st.info("Memproses video… (akan menghasilkan video dengan bounding box)")
+        prog = st.progress(0); status = st.empty()
+
+        cap = cv2.VideoCapture(t_in.name)
+        if not cap.isOpened():
+            st.error("Gagal membuka video.")
+        else:
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25
+            w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+
+            t_out = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            writer = cv2.VideoWriter(t_out.name, fourcc, fps, (w, h))
+
+            i = 0
+            while True:
+                ok, frame = cap.read()
+                if not ok: break
+                annotated, _ = yolo_annotate(frame, model, conf_thres, iou_thres, imgsz)
+                writer.write(annotated)
+                i += 1
+                if total > 0:
+                    prog.progress(min(i/total, 1.0)); status.text(f"Frame {i}/{total}")
+            writer.release(); cap.release()
+            prog.progress(1.0); status.text("Selesai ✅")
+
+            st.video(t_out.name)
+            with open(t_out.name, "rb") as f:
+                st.download_button("Download hasil (MP4)", f, file_name="deteksi.mp4", mime="video/mp4")
